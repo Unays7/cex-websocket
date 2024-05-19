@@ -1,20 +1,19 @@
-use futures_util::{StreamExt, SinkExt, stream::SplitStream, stream::SplitSink};
-use tokio_tungstenite::{connect_async, tungstenite::Message, WebSocketStream};
+use futures_util::{stream::SplitSink, stream::SplitStream, SinkExt, StreamExt};
 use serde_json::json;
-use tokio::net::TcpStream;
-use tokio_tungstenite::MaybeTlsStream;
-use tokio::task;
 use std::error::Error;
+use tokio::net::TcpStream;
+use tokio::task;
+use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream, tungstenite::Message};
 
-pub struct WebSocket {
-    url: String,
+pub struct WebSocket<'a> {
+    url: &'a str,
     read: Option<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
     write: Option<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>,
-    name: String,
+    name: &'a str,
 }
 
-impl WebSocket {
-    pub fn new(url: String, name: String) -> Self {
+impl<'a> WebSocket<'a> {
+    pub fn new(url: &'a str, name: &'a str) -> Self {
         WebSocket {
             url,
             read: None,
@@ -25,7 +24,7 @@ impl WebSocket {
 
     pub async fn connect(&mut self) -> Result<(), Box<dyn Error>> {
         println!("Connecting to: {}", self.url);
-        let (ws_stream, _) = connect_async(&self.url).await?;
+        let (ws_stream, _) = connect_async(self.url).await?;
         println!("Connected :)");
         let (write, read) = ws_stream.split();
         self.write = Some(write);
@@ -33,12 +32,10 @@ impl WebSocket {
         Ok(())
     }
 
-    pub async fn start_stream(&mut self, request: String) -> Result<(), Box<dyn Error>> {
+    pub async fn start_stream(&mut self, request: &str) -> Result<(), Box<dyn Error>> {
         let json_request = json!({
             "method": "SUBSCRIBE",
-            "params": [
-                request
-            ],
+            "params": [request],
             "id": 1
         });
         let msg = Message::Text(json_request.to_string());
@@ -79,11 +76,11 @@ impl WebSocket {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let mut btcusdt_aggTrade_client = WebSocket::new(
-        "wss://stream.binance.com:443/ws".to_string(),
-        "btcusdt_aggTrade_client".to_string(),
+        "wss://stream.binance.com:443/ws",
+        "btcusdt_aggTrade_client",
     );
     btcusdt_aggTrade_client.connect().await?;
-    btcusdt_aggTrade_client.start_stream("btcusdt@aggTrade".to_string()).await?;
+    btcusdt_aggTrade_client.start_stream("btcusdt@aggTrade").await?;
 
     let btcusdt_agg_trade_handle = task::spawn(async move {
         if let Err(e) = btcusdt_aggTrade_client.print_stream().await {
@@ -92,11 +89,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     let mut btcusd_bookTicker_client = WebSocket::new(
-        "wss://stream.binance.com:443/ws".to_string(),
-        "btcusd_bookTicker_client".to_string(),
+        "wss://stream.binance.com:443/ws",
+        "btcusd_bookTicker_client",
     );
     btcusd_bookTicker_client.connect().await?;
-    btcusd_bookTicker_client.start_stream("btcusdt@bookTicker".to_string()).await?;
+    btcusd_bookTicker_client.start_stream("btcusdt@bookTicker").await?;
 
     let btcusd_book_ticker_handle = task::spawn(async move {
         if let Err(e) = btcusd_bookTicker_client.print_stream().await {
